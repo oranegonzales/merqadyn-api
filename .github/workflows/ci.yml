@@ -16,7 +16,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -46,3 +46,13 @@ jobs:
 
       - name: Validate Compose file
         run: docker compose config --quiet
+
+      - name: Verify PostgreSQL startup
+        run: docker compose up --build --wait --wait-timeout 180
+
+      - name: Check application health
+        run: curl --fail --silent --show-error http://127.0.0.1:8080/actuator/health
+
+      - name: Stop test services
+        if: always()
+        run: docker compose down --volumes

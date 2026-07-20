@@ -63,7 +63,7 @@ cd merqadyn-api
 .\scripts\start-local.ps1
 ```
 
-The Windows launcher verifies Docker and Compose, starts Docker Desktop when its engine is stopped, waits for Linux containers to become available, creates `.env` with unique local passwords when the file is missing, validates the Compose configuration, and builds the services. Add `-Detach` to run the services in the background:
+The Windows launcher verifies Docker and Compose, starts Docker Desktop when its engine is stopped, waits for Linux containers to become available, creates `.env` with unique local passwords when the file is missing, validates the Compose configuration, and builds the services. In detached mode it also waits for the application health check and prints the application logs if startup fails. Add `-Detach` to run the services in the background:
 
 ```powershell
 .\scripts\start-local.ps1 -Detach
@@ -204,7 +204,7 @@ The detailed mobile contract is in [docs/offline-sync-contract.md](docs/offline-
 ./gradlew.bat clean test bootJar --no-build-cache
 ```
 
-The test suite checks application startup, conflict policy, idempotent stock replays, and stale product conflict recording. CI also validates the Compose file. CodeQL uses a clean uncached compilation so Kotlin source is always observed during analysis.
+The test suite checks application startup, conflict policy, idempotent stock replays, and stale product conflict recording. CI validates the Compose file and starts the complete application against PostgreSQL before checking its health endpoint. CodeQL uses a clean uncached compilation so Kotlin source is always observed during analysis.
 
 ## Repository structure
 
