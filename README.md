@@ -60,12 +60,21 @@ From PowerShell:
 ```powershell
 git clone https://github.com/oranegonzales/merqadyn-api.git
 cd merqadyn-api
-Copy-Item .env.example .env
-notepad .env
-docker compose up --build
+.\scripts\start-local.ps1
 ```
 
-Replace both example passwords in `.env` before exposing the application outside your computer.
+The Windows launcher verifies Docker and Compose, starts Docker Desktop when its engine is stopped, waits for Linux containers to become available, creates `.env` with unique local passwords when the file is missing, validates the Compose configuration, and builds the services. Add `-Detach` to run the services in the background:
+
+```powershell
+.\scripts\start-local.ps1 -Detach
+```
+
+If PowerShell blocks the script, allow this repository's script for the current terminal and run it again:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\start-local.ps1
+```
 
 Open:
 
@@ -86,6 +95,27 @@ Add `-v` only when you intentionally want to delete the local PostgreSQL volume 
 ```powershell
 docker compose down -v
 ```
+
+### Docker Desktop cannot connect
+
+An error mentioning `dockerDesktopLinuxEngine` or a missing named pipe means the Docker client is installed but the Docker Desktop Linux engine is not running. It occurs before Merqadyn is built, so changing application code or rebuilding the image cannot resolve it.
+
+Use the launcher above, or recover Docker Desktop manually:
+
+```powershell
+docker desktop start --timeout 120
+docker info
+docker compose up --build
+```
+
+If `docker desktop start` is not available, open Docker Desktop from the Windows Start menu and wait until startup completes. In Docker Desktop, confirm **Settings > General > Use the WSL 2 based engine** is enabled. If startup remains stuck, close Docker Desktop, update WSL, restart Windows, and try again:
+
+```powershell
+wsl --update
+wsl --shutdown
+```
+
+Docker's official references cover the [Desktop CLI](https://docs.docker.com/desktop/features/desktop-cli/), [WSL 2 backend](https://docs.docker.com/desktop/features/wsl/), and [Windows installation requirements](https://docs.docker.com/desktop/setup/install/windows-install/).
 
 ## Run from IntelliJ IDEA
 
@@ -128,7 +158,8 @@ The seeded HWT device ID is `55555555-5555-4555-8555-555555555551`. The seeded b
 
 ```powershell
 $merchant = "11111111-1111-4111-8111-111111111111"
-$credential = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("merqadyn:change-me"))
+$settings = Get-Content .env -Raw | ConvertFrom-StringData
+$credential = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$($settings.MERQADYN_ADMIN_USER):$($settings.MERQADYN_ADMIN_PASSWORD)"))
 $headers = @{ Authorization = "Basic $credential" }
 $body = @{
   deviceId = "55555555-5555-4555-8555-555555555551"
