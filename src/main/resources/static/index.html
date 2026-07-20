@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Merqadyn coordinates offline merchant work and reconciles inventory when devices reconnect.">
+  <meta name="theme-color" content="#191a1d">
+  <title>Merqadyn — Merchant operations</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#overview" aria-label="Merqadyn home">
+      <img src="/assets/merqadyn-mark.svg" width="38" height="38" alt="">
+      <span>MERQADYN</span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#overview">Overview</a>
+      <a href="#inventory">Inventory</a>
+      <a href="#sync">Sync model</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="intro" id="overview">
+      <div class="eyebrow">Merchant operations / Jamaica</div>
+      <div class="intro-grid">
+        <div>
+          <h1>Inventory that catches up cleanly.</h1>
+          <p class="lede">Merqadyn accepts work from disconnected merchant devices, applies idempotent mutations, and gives each device an ordered change cursor when it reconnects.</p>
+        </div>
+        <dl class="merchant-note">
+          <div><dt>Workspace</dt><dd id="merchant-name">Loading merchant</dd></div>
+          <div><dt>Ledger cursor</dt><dd id="latest-cursor">—</dd></div>
+          <div><dt>Refreshed</dt><dd id="last-updated">Waiting for data</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="metrics" aria-label="Merchant summary">
+      <article><span>Stock on hand</span><strong id="units-on-hand">—</strong><small>units across every location</small></article>
+      <article><span>Inventory value</span><strong id="inventory-value">—</strong><small>at current catalog prices</small></article>
+      <article><span>Low stock</span><strong id="low-stock">—</strong><small>location and item pairs</small></article>
+      <article><span>Registered devices</span><strong id="device-count">—</strong><small>merchant workstations</small></article>
+    </section>
+
+    <section class="section" aria-labelledby="location-heading">
+      <div class="section-heading">
+        <div>
+          <p class="section-index">01 / Locations</p>
+          <h2 id="location-heading">Stock where the work happens</h2>
+        </div>
+        <p>Each count comes from the reconciled server view, not a device-side estimate.</p>
+      </div>
+      <div class="location-grid" id="location-grid"></div>
+    </section>
+
+    <section class="section inventory-section" id="inventory" aria-labelledby="inventory-heading">
+      <div class="section-heading inventory-heading-row">
+        <div>
+          <p class="section-index">02 / Inventory</p>
+          <h2 id="inventory-heading">Reconciled inventory</h2>
+        </div>
+        <label class="filter-label" for="location-filter">
+          Location
+          <select id="location-filter">
+            <option value="all">All locations</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Product</th><th>SKU</th><th>Location</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Version</th></tr>
+          </thead>
+          <tbody id="inventory-body">
+            <tr><td colspan="7" class="table-message">Loading inventory</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section split-section" id="sync" aria-labelledby="sync-heading">
+      <div class="sync-explainer">
+        <p class="section-index">03 / Sync model</p>
+        <h2 id="sync-heading">The server decides once.</h2>
+        <ol>
+          <li><span>01</span><div><h3>Accept a mutation ID</h3><p>A device-generated UUID makes every submitted change safe to retry.</p></div></li>
+          <li><span>02</span><div><h3>Resolve by mutation type</h3><p>Stock deltas commute. Stale product edits retain the current server version and create an audit record.</p></div></li>
+          <li><span>03</span><div><h3>Return ordered changes</h3><p>The response includes everything after the device cursor, ready for a local Room transaction.</p></div></li>
+        </ol>
+      </div>
+      <div class="activity-panel">
+        <div class="activity-heading"><h3>Recent change log</h3><span id="activity-count">—</span></div>
+        <div id="activity-list" class="activity-list"></div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="device-heading">
+      <div class="section-heading">
+        <div>
+          <p class="section-index">04 / Devices</p>
+          <h2 id="device-heading">Registered workstations</h2>
+        </div>
+        <p>Cursor position shows how far each device has consumed the merchant change log.</p>
+      </div>
+      <div class="device-list" id="device-list"></div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="brand footer-brand"><img src="/assets/merqadyn-mark.svg" width="30" height="30" alt=""><span>MERQADYN</span></div>
+    <p>Kotlin / Spring Boot / PostgreSQL</p>
+  </footer>
+</body>
+</html>
