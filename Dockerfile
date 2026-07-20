@@ -1,4 +1,4 @@
-FROM eclipse-temurin:21-jdk AS build
+FROM eclipse-temurin:25-jdk AS build
 WORKDIR /workspace
 COPY gradle gradle
 COPY gradlew gradlew
@@ -7,7 +7,7 @@ RUN chmod +x gradlew && ./gradlew --no-daemon dependencies
 COPY src src
 RUN ./gradlew --no-daemon clean bootJar --no-build-cache
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 WORKDIR /app
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends curl \
