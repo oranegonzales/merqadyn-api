@@ -110,11 +110,17 @@ try {
     }
     if ($Detach) {
         $arguments += "--detach"
+        $arguments += "--wait"
+        $arguments += "--wait-timeout"
+        $arguments += $EngineTimeoutSeconds
     }
 
     & docker @arguments
     if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
+        $composeExitCode = $LASTEXITCODE
+        & docker compose ps --all
+        & docker compose logs --no-color --tail 200 app
+        exit $composeExitCode
     }
 
     if ($Detach) {
