@@ -38,7 +38,9 @@ class ApiProtectionFilterTests {
     @Test
     fun `streamed write without a declared length is rejected`() {
         val filter = ApiProtectionFilter(InMemoryRateLimitStore(), 1024, 10, 10)
-        val request = MockHttpServletRequest("POST", "/api/v1/test")
+        val request = MockHttpServletRequest("POST", "/api/v1/test").apply {
+            setContentType("application/json")
+        }
         val response = MockHttpServletResponse()
 
         filter.doFilter(request, response, MockFilterChain())

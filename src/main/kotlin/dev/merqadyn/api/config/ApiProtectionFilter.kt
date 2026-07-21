@@ -78,7 +78,7 @@ class ApiProtectionFilter(
         }
 
         val bodyMethod = request.method in setOf("POST", "PUT", "PATCH")
-        if (bodyMethod && request.contentLengthLong < 0) {
+        if (bodyMethod && request.contentLengthLong < 0 && request.contentType != null) {
             reject(response, HttpServletResponse.SC_LENGTH_REQUIRED, "length_required", "Content-Length is required")
             return
         }
