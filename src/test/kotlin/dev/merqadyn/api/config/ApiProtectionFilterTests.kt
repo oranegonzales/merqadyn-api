@@ -23,7 +23,7 @@ class ApiProtectionFilterTests {
     fun `oversized request is rejected before reaching the application`() {
         val filter = ApiProtectionFilter(InMemoryRateLimitStore(), 8, 10, 10)
         val request = MockHttpServletRequest("POST", "/api/v1/test").apply {
-            content = "more than eight bytes".toByteArray()
+            setContent("more than eight bytes".toByteArray())
         }
         val response = MockHttpServletResponse()
         val chain = MockFilterChain()
