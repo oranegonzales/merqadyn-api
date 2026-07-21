@@ -4,6 +4,7 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.DecimalMin
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import tools.jackson.databind.JsonNode
 import java.math.BigDecimal
@@ -107,6 +108,13 @@ data class ChangePage(
     val hasMore: Boolean,
 )
 
+data class PageView<T>(
+    val items: List<T>,
+    val page: Int,
+    val size: Int,
+    val hasMore: Boolean,
+)
+
 data class SyncBatchResponse(
     val deviceId: UUID,
     val accepted: Int,
@@ -127,8 +135,32 @@ data class MerchantSummary(
     val timezone: String,
 )
 
+data class MerchantContextResponse(
+    val merchant: MerchantSummary,
+    val latestCursor: Long,
+)
+
 data class PublicConfig(
     val demoMerchantId: UUID,
+)
+
+data class DeviceEnrollmentResponse(
+    val deviceId: UUID,
+    val code: String,
+    val expiresAt: Instant,
+)
+
+data class RedeemEnrollmentRequest(
+    @field:NotNull
+    val deviceId: UUID,
+    @field:Pattern(regexp = "^[23456789A-HJ-NP-Z]{10}$")
+    val code: String,
+)
+
+data class DeviceCredentialsResponse(
+    val merchantId: UUID,
+    val deviceId: UUID,
+    val deviceToken: String,
 )
 
 data class LocationSummary(
@@ -171,6 +203,53 @@ data class OverviewResponse(
     val locations: List<LocationSummary>,
     val devices: List<DeviceSummary>,
     val inventory: List<InventoryView>,
+    val recentActivity: List<ActivityView>,
+)
+
+data class PublicMerchantSummary(
+    val name: String,
+    val currency: String,
+)
+
+data class PublicLocationSummary(
+    val code: String,
+    val name: String,
+    val address: String,
+    val itemCount: Int,
+    val unitsOnHand: BigDecimal,
+)
+
+data class PublicInventoryView(
+    val locationCode: String,
+    val locationName: String,
+    val sku: String,
+    val productName: String,
+    val onHand: BigDecimal,
+    val reserved: BigDecimal,
+    val available: BigDecimal,
+    val unit: String,
+    val version: Long,
+)
+
+data class PublicDeviceSummary(
+    val name: String,
+    val locationName: String,
+    val platform: String,
+    val appVersion: String,
+    val lastCursor: Long,
+)
+
+data class PublicOverviewResponse(
+    val merchant: PublicMerchantSummary,
+    val productCount: Int,
+    val locationCount: Int,
+    val deviceCount: Int,
+    val unitsOnHand: BigDecimal,
+    val inventoryValue: BigDecimal,
+    val lowStockItems: Int,
+    val locations: List<PublicLocationSummary>,
+    val devices: List<PublicDeviceSummary>,
+    val inventory: List<PublicInventoryView>,
     val recentActivity: List<ActivityView>,
 )
 

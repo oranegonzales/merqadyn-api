@@ -4,6 +4,7 @@ import dev.merqadyn.api.api.ActivityView
 import dev.merqadyn.api.api.DeviceSummary
 import dev.merqadyn.api.api.LocationSummary
 import dev.merqadyn.api.api.MerchantSummary
+import dev.merqadyn.api.api.MerchantContextResponse
 import dev.merqadyn.api.api.NotFoundException
 import dev.merqadyn.api.api.OverviewResponse
 import dev.merqadyn.api.catalog.ProductRepository
@@ -15,6 +16,7 @@ import dev.merqadyn.api.merchant.MerchantRepository
 import dev.merqadyn.api.sync.ChangeLogRepository
 import dev.merqadyn.api.sync.SyncConflictRepository
 import org.springframework.stereotype.Service
+import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
 import java.math.BigDecimal
@@ -41,15 +43,11 @@ class OverviewService(
             NotFoundException("Merchant $merchantId was not found")
         }
         val locations = locationRepository.findAllByMerchantIdOrderByName(merchantId)
-        val devices = deviceRepository.findAllByMerchantIdOrderByName(merchantId)
-        val products = productRepository.findAllByMerchantIdOrderByName(merchantId)
-        val productById = products.associateBy { it.id }
-        val inventoryEntities = inventoryItemRepository.findAllByMerchantIdOrderByUpdatedAtDesc(merchantId)
-        val inventory = inventoryService.list(merchantId)
-        val unitsOnHand = inventoryEntities.sumOf { it.onHand }
-        val inventoryValue = inventoryEntities.fold(BigDecimal.ZERO) { total, item ->
-            total.add(item.onHand.multiply(productById[item.productId]?.price ?: BigDecimal.ZERO))
-        }.setScale(2, RoundingMode.HALF_UP)
+        val devices = deviceRepository.findByMerchantIdOrderByNameAsc(merchantId, PageRequest.of(0, 100)).content
+        val inventory = inventoryService.page(merchantId, 0, 200).items
+        val unitsOnHand = inventoryItemRepository.totalOnHand(merchantId)
+        val inventoryValue = inventoryItemRepository.inventoryValue(merchantId).setScale(2, RoundingMode.HALF_UP)
+        val inventoryByLocation = inventoryItemRepository.locationSummaries(merchantId).associateBy { it.locationId }
         val locationNames = locations.associate { it.id to it.name }
         return OverviewResponse(
             merchant = MerchantSummary(
@@ -58,26 +56,26 @@ class OverviewService(
                 currency = merchant.currency,
                 timezone = merchant.timezone,
             ),
-            productCount = products.count { it.active },
+            productCount = productRepository.countByMerchantIdAndActiveTrue(merchantId).toInt(),
             locationCount = locations.size,
-            deviceCount = devices.size,
+            deviceCount = deviceRepository.countByMerchantId(merchantId).toInt(),
             unitsOnHand = unitsOnHand,
             inventoryValue = inventoryValue,
-            lowStockItems = inventory.count { it.available <= BigDecimal("5.000") },
+            lowStockItems = inventoryItemRepository.lowStockCount(merchantId).toInt(),
             conflictsLast24Hours = syncConflictRepository.countByMerchantIdAndCreatedAtAfter(
                 merchantId,
                 Instant.now().minus(24, ChronoUnit.HOURS),
             ),
             latestCursor = changeLogRepository.latestCursor(merchantId),
             locations = locations.map { location ->
-                val locationInventory = inventoryEntities.filter { it.locationId == location.id }
+                val locationInventory = inventoryByLocation[location.id]
                 LocationSummary(
                     id = location.id,
                     code = location.code,
                     name = location.name,
                     address = location.address,
-                    itemCount = locationInventory.size,
-                    unitsOnHand = locationInventory.sumOf { it.onHand },
+                    itemCount = locationInventory?.itemCount?.toInt() ?: 0,
+                    unitsOnHand = locationInventory?.unitsOnHand ?: BigDecimal.ZERO,
                 )
             },
             devices = devices.map { device ->
@@ -111,6 +109,17 @@ class OverviewService(
                     occurredAt = change.occurredAt,
                 )
             },
+        )
+    }
+
+    @Transactional(readOnly = true)
+    fun context(merchantId: UUID): MerchantContextResponse {
+        val merchant = merchantRepository.findById(merchantId).orElseThrow {
+            NotFoundException("Merchant $merchantId was not found")
+        }
+        return MerchantContextResponse(
+            merchant = MerchantSummary(merchant.id, merchant.name, merchant.currency, merchant.timezone),
+            latestCursor = changeLogRepository.latestCursor(merchantId),
         )
     }
 }

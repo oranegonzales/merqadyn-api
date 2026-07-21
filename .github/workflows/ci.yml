@@ -17,6 +17,11 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      DATABASE_USER: merqadyn_ci
+      DATABASE_PASSWORD: ci-database-password-not-used-outside-actions
+      MERQADYN_ADMIN_USER: merqadyn-ci
+      MERQADYN_ADMIN_PASSWORD: ci-admin-password-not-used-outside-actions
     steps:
       - name: Check out source
         uses: actions/checkout@v7

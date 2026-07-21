@@ -61,6 +61,12 @@ class DeviceEntity(
     var lastCursor: Long = 0,
     @Column(name = "last_seen_at")
     var lastSeenAt: Instant? = null,
+    @Column(name = "credential_hash", length = 64)
+    var credentialHash: String? = null,
+    @Column(name = "enrollment_code_hash", length = 64)
+    var enrollmentCodeHash: String? = null,
+    @Column(name = "enrollment_expires_at")
+    var enrollmentExpiresAt: Instant? = null,
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant = Instant.now(),
 )
