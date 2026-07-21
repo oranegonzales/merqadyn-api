@@ -11,6 +11,8 @@ class NotFoundException(message: String) : RuntimeException(message)
 
 class BusinessRuleException(message: String) : RuntimeException(message)
 
+class EnrollmentException : RuntimeException("Enrollment code is invalid or expired")
+
 @RestControllerAdvice
 class ApiExceptionHandler {
     @ExceptionHandler(NotFoundException::class)
@@ -20,6 +22,10 @@ class ApiExceptionHandler {
     @ExceptionHandler(BusinessRuleException::class)
     fun businessRule(exception: BusinessRuleException, request: HttpServletRequest): ResponseEntity<ApiProblem> =
         problem(HttpStatus.UNPROCESSABLE_ENTITY, "business_rule", exception.message ?: "Request rejected", request)
+
+    @ExceptionHandler(EnrollmentException::class)
+    fun enrollment(request: HttpServletRequest): ResponseEntity<ApiProblem> =
+        problem(HttpStatus.UNAUTHORIZED, "invalid_enrollment", "Enrollment code is invalid or expired", request)
 
     @ExceptionHandler(MethodArgumentNotValidException::class)
     fun validation(exception: MethodArgumentNotValidException, request: HttpServletRequest): ResponseEntity<ApiProblem> {

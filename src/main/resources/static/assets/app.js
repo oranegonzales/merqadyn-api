@@ -37,9 +37,9 @@ function renderLocations(locations) {
   }));
 }
 
-function renderInventory(locationId = "all") {
+function renderInventory(locationCode = "all") {
   const body = document.querySelector("#inventory-body");
-  const rows = overview.inventory.filter(item => locationId === "all" || item.locationId === locationId);
+  const rows = overview.inventory.filter(item => locationCode === "all" || item.locationCode === locationCode);
   if (!rows.length) {
     body.innerHTML = '<tr><td colspan="7" class="table-message">No inventory is recorded for this location.</td></tr>';
     return;
@@ -95,7 +95,7 @@ function populateFilter(locations) {
   const filter = document.querySelector("#location-filter");
   locations.forEach(location => {
     const option = document.createElement("option");
-    option.value = location.id;
+    option.value = location.code;
     option.textContent = location.name;
     filter.append(option);
   });
@@ -104,16 +104,12 @@ function populateFilter(locations) {
 
 async function loadOverview() {
   try {
-    const configResponse = await fetch("/api/v1/config");
-    if (!configResponse.ok) throw new Error(`Configuration request failed with ${configResponse.status}`);
-    const config = await configResponse.json();
-    const merchantId = config.demoMerchantId;
-    const response = await fetch(`/api/v1/merchants/${merchantId}/overview`);
+    const response = await fetch("/api/v1/public/overview", {
+      headers: { "Accept": "application/json" },
+      credentials: "omit"
+    });
     if (!response.ok) throw new Error(`Request failed with ${response.status}`);
     overview = await response.json();
-    document.querySelector("#merchant-name").textContent = overview.merchant.name;
-    document.querySelector("#latest-cursor").textContent = overview.latestCursor;
-    document.querySelector("#last-updated").textContent = dateTime.format(new Date());
     document.querySelector("#units-on-hand").textContent = number.format(overview.unitsOnHand);
     document.querySelector("#inventory-value").textContent = formatMoney(overview.inventoryValue, overview.merchant.currency);
     document.querySelector("#low-stock").textContent = overview.lowStockItems;
@@ -124,8 +120,7 @@ async function loadOverview() {
     renderDevices(overview.devices);
     populateFilter(overview.locations);
   } catch (error) {
-    document.querySelector("#last-updated").textContent = "Data could not be loaded";
-    document.querySelector("#inventory-body").innerHTML = '<tr><td colspan="7" class="table-message">The API is unavailable. Confirm that the application and PostgreSQL are running.</td></tr>';
+    document.querySelector("#inventory-body").innerHTML = '<tr><td colspan="7" class="table-message">Inventory could not be loaded. Try again in a moment.</td></tr>';
   }
 }
 

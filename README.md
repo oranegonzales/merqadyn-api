@@ -2,226 +2,123 @@
 
 # Merqadyn API
 
-Merqadyn is an offline-first merchant operations platform built with Kotlin, Spring Boot, and PostgreSQL. Store devices can record catalog and inventory work without a connection, submit mutations later, and pull an ordered stream of server changes using a durable cursor.
+Merqadyn is a horizontally scalable merchant inventory and offline synchronization service. Kotlin and Spring Boot expose a stateless API; PostgreSQL owns durable business state; Redis coordinates rate limits across application instances; Flyway manages the schema; and the bundled website presents a deliberately limited public read model.
 
-The repository includes the API, database migrations, synchronization engine, operations dashboard, automated tests, Docker environment, CI, CodeQL scanning, and the contract intended for the companion Android application.
+## What it demonstrates
 
-## What the project demonstrates
+- idempotent device mutations with durable UUID deduplication
+- cursor-based incremental synchronization and deterministic conflicts
+- one-time phone enrollment and device-scoped authentication
+- bounded request bodies, write quotas, pagination, and connection pooling
+- indexed PostgreSQL access paths and aggregate dashboard queries
+- stateless application instances suitable for load balancing
+- non-root, read-only application containers with dropped capabilities
+- health probes, Prometheus metrics, CI, CodeQL, and integration tests
 
-- Idempotent mutation processing with device-generated UUIDs
-- Cursor-based incremental synchronization
-- Optimistic product versions and deterministic conflict handling
-- Commutative stock adjustments that remain safe after reconnecting
-- An append-only change log and conflict audit history
-- Merchant, location, device, product, inventory, and movement boundaries
-- PostgreSQL migrations with Flyway
-- Stateless HTTP Basic authentication for write operations
-- Health checks, Prometheus metrics, Docker Compose, CI, and CodeQL
-- Integration tests for duplicate mutations and stale product updates
-
-## How synchronization works
+## Synchronization
 
 ```mermaid
 flowchart TD
-    A["Android device queues mutations"] --> B["POST sync batch"]
-    B --> C{"Mutation seen before?"}
+    A["Phone queues a mutation"] --> B["Submit bounded batch"]
+    B --> C{"Mutation ID seen?"}
     C -- Yes --> D["Return stored result"]
-    C -- No --> E["Apply type-specific rule"]
-    E --> F["Write domain state and change log"]
-    D --> G["Read changes after device cursor"]
+    C -- No --> E["Apply domain rule"]
+    E --> F["Persist state and change cursor"]
+    D --> G["Return changes after cursor"]
     F --> G
-    G --> H["Commit state and cursor in Room"]
 ```
 
-Stock adjustments are deltas, so separate devices can contribute changes without replacing each other's counts. Product edits carry a `baseVersion`. When that version is stale, Merqadyn keeps the current server record, writes a conflict audit entry, and tells the device to pull before retrying.
+Stock changes are deltas. Product edits carry a base version. Replayed mutation IDs return the prior result, while stale product versions become retained conflicts rather than silent overwrites.
 
-## Technology
+## Run on Windows
 
-| Area | Choice |
-|---|---|
-| Language | Kotlin 2.3.21 on Java 21 |
-| Application | Spring Boot 4.1, Spring MVC, Spring Data JPA |
-| Data | PostgreSQL 17, Flyway |
-| Security | Spring Security, stateless HTTP Basic for writes |
-| Observability | Actuator, Prometheus metrics |
-| Delivery | Gradle, Docker, Docker Compose, GitHub Actions |
-| Verification | JUnit 5, Spring Boot Test, H2 PostgreSQL mode, CodeQL |
-
-## Run with Docker Desktop
-
-Requirements:
-
-- Docker Desktop with Linux containers enabled
-- Git
-- Ports `8080` and `5432` available
-
-From PowerShell:
+Requirements are Docker Desktop using Linux containers and Git. PostgreSQL is internal to the Compose network; only application port 8080 is published.
 
 ```powershell
-git clone https://github.com/oranegonzales/merqadyn-api.git
+git clone https://github.com/oranegonzales/merqadyn-apido.git merqadyn-api
 cd merqadyn-api
-.\scripts\start-local.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -Detach
+curl.exe http://127.0.0.1:8080/actuator/health
 ```
 
-The Windows launcher verifies Docker and Compose, starts Docker Desktop when its engine is stopped, waits for Linux containers to become available, creates `.env` with unique local passwords when the file is missing, validates the Compose configuration, and builds the services. In detached mode it also waits for the application health check and prints the application logs if startup fails. Add `-Detach` to run the services in the background:
+Open `http://localhost:8080`. The launcher verifies Docker, creates `.env` with unique local passwords, builds PostgreSQL, Redis, and the application, and waits for health.
+
+If Docker reports a missing `dockerDesktopLinuxEngine` named pipe, open Docker Desktop and wait for the Linux engine, or run:
 
 ```powershell
-.\scripts\start-local.ps1 -Detach
+docker desktop start --timeout 120
+docker info
 ```
 
-If PowerShell blocks the script, allow this repository's script for the current terminal and run it again:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\scripts\start-local.ps1
-```
-
-Open:
-
-- Dashboard: `http://localhost:8080`
-- Health: `http://localhost:8080/actuator/health`
-- Prometheus metrics: `http://localhost:8080/actuator/prometheus`
-
-The first start creates the database and loads the Northline Market demonstration merchant with three Jamaican locations, five products, inventory rows, registered Android devices, and an initial change log.
-
-Stop the services with:
+Stop without deleting data:
 
 ```powershell
 docker compose down
 ```
 
-Add `-v` only when you intentionally want to delete the local PostgreSQL volume and its data:
+`docker compose down --volumes` intentionally deletes the local database volume.
+
+## Connect the Android app
+
+The companion [Merqadyn Mobile](https://github.com/oranegonzales/merqadyn-mobile) setup helper authenticates from the developer's computer and requests a 10-minute enrollment code. The phone redeems that code once for a random, device-scoped token; the administrator password is never built into the APK.
 
 ```powershell
-docker compose down -v
+cd ..\merqadyn-mobile
+.\scripts\configure-local.ps1 -Target UsbPhone
+.\gradlew.bat installDebug
 ```
 
-### Docker Desktop cannot connect
+## API access
 
-An error mentioning `dockerDesktopLinuxEngine` or a missing named pipe means the Docker client is installed but the Docker Desktop Linux engine is not running. It occurs before Merqadyn is built, so changing application code or rebuilding the image cannot resolve it.
+Only health, static assets, public configuration, the public overview, and enrollment redemption are anonymous. Private merchant reads accept administrator Basic auth or device headers. Administrative writes require Basic auth. Sync accepts an administrator or the matching enrolled device.
 
-Use the launcher above, or recover Docker Desktop manually:
+| Method | Route | Access |
+| --- | --- | --- |
+| `GET` | `/api/v1/public/overview` | Public, privacy-limited and edge-cacheable |
+| `POST` | `/api/v1/device-enrollments/redeem` | Public, rate-limited, one-time code required |
+| `POST` | `/api/v1/merchants/{merchantId}/devices/{deviceId}/enrollment` | Administrator |
+| `DELETE` | `/api/v1/merchants/{merchantId}/devices/{deviceId}/credential` | Administrator or that device |
+| `GET` | `/api/v1/merchants/{merchantId}/context` | Administrator or matching device |
+| `GET` | `/api/v1/merchants/{merchantId}/products/page?page=0&size=200` | Administrator or matching device |
+| `GET` | `/api/v1/merchants/{merchantId}/inventory/page?page=0&size=200` | Administrator or matching device |
+| `GET` | `/api/v1/merchants/{merchantId}/sync/changes?after=0&limit=100` | Administrator or matching device |
+| `POST` | `/api/v1/merchants/{merchantId}/sync/batches` | Administrator or the same device ID |
 
-```powershell
-docker desktop start --timeout 120
-docker info
-docker compose up --build
-```
-
-If `docker desktop start` is not available, open Docker Desktop from the Windows Start menu and wait until startup completes. In Docker Desktop, confirm **Settings > General > Use the WSL 2 based engine** is enabled. If startup remains stuck, close Docker Desktop, update WSL, restart Windows, and try again:
-
-```powershell
-wsl --update
-wsl --shutdown
-```
-
-Docker's official references cover the [Desktop CLI](https://docs.docker.com/desktop/features/desktop-cli/), [WSL 2 backend](https://docs.docker.com/desktop/features/wsl/), and [Windows installation requirements](https://docs.docker.com/desktop/setup/install/windows-install/).
-
-## Run from IntelliJ IDEA
-
-1. Start PostgreSQL with `docker compose up postgres`.
-2. Open the repository as a Gradle project.
-3. Select Java 21 as the project SDK.
-4. Run `MerqadynApiApplication.kt`.
-5. Keep the default database values or set the environment variables listed below.
+Device requests send `X-Merqadyn-Device-Id` and `X-Merqadyn-Device-Token`. Legacy list endpoints remain available but return at most 200 rows.
 
 ## Configuration
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `DATABASE_URL` | `jdbc:postgresql://localhost:5432/merqadyn` | JDBC connection URL |
-| `DATABASE_USER` | `merqadyn` | PostgreSQL user |
-| `DATABASE_PASSWORD` | `merqadyn` | PostgreSQL password |
-| `MERQADYN_ADMIN_USER` | `merqadyn` | Username for write operations |
-| `MERQADYN_ADMIN_PASSWORD` | `change-me` | Password for write operations |
-| `MERQADYN_DEMO_MERCHANT_ID` | `11111111-1111-4111-8111-111111111111` | Merchant displayed by the bundled dashboard |
+| Variable | Purpose | Compose value |
+| --- | --- | --- |
+| `DATABASE_URL` | JDBC URL | internal PostgreSQL service |
+| `DATABASE_USER` / `DATABASE_PASSWORD` | Database credential | generated/local `.env` |
+| `DATABASE_POOL_MAX_SIZE` | Maximum connections per instance | `20` |
+| `DATABASE_POOL_MIN_IDLE` | Warm idle connections per instance | `5` |
+| `REDIS_URL` | Shared quota store | internal Redis service |
+| `RATE_LIMIT_BACKEND` | `redis` for multi-instance deployment; `memory` for tests | `redis` |
+| `MERQADYN_ADMIN_USER` / `MERQADYN_ADMIN_PASSWORD` | Administrator credential | generated/local `.env` |
+| `MERQADYN_DEMO_MERCHANT_ID` | Merchant used by the public website | seeded merchant |
 
-All `GET` routes are readable for the portfolio dashboard. `POST` routes require HTTP Basic authentication.
+The administrator password must be at least 20 characters. Never commit `.env` or deploy the example values.
 
-## API surface
-
-The seeded merchant ID is `11111111-1111-4111-8111-111111111111`.
-
-| Method | Route | Purpose |
-|---|---|---|
-| `GET` | `/api/v1/config` | Merchant selected for the bundled dashboard |
-| `GET` | `/api/v1/merchants/{merchantId}/overview` | Dashboard summary and recent activity |
-| `GET` | `/api/v1/merchants/{merchantId}/products` | Merchant catalog |
-| `POST` | `/api/v1/merchants/{merchantId}/products` | Create a product |
-| `GET` | `/api/v1/merchants/{merchantId}/inventory` | Reconciled inventory, optionally filtered by `locationId` |
-| `GET` | `/api/v1/merchants/{merchantId}/sync/changes?after=0&limit=100` | Ordered changes after a cursor |
-| `POST` | `/api/v1/merchants/{merchantId}/sync/batches` | Submit offline mutations and pull changes |
-
-### Submit an offline stock adjustment
-
-The seeded HWT device ID is `55555555-5555-4555-8555-555555555551`. The seeded bread product ID is `33333333-3333-4333-8333-333333333331`.
+## Verification
 
 ```powershell
-$merchant = "11111111-1111-4111-8111-111111111111"
-$settings = Get-Content .env -Raw | ConvertFrom-StringData
-$credential = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$($settings.MERQADYN_ADMIN_USER):$($settings.MERQADYN_ADMIN_PASSWORD)"))
-$headers = @{ Authorization = "Basic $credential" }
-$body = @{
-  deviceId = "55555555-5555-4555-8555-555555555551"
-  lastPulledCursor = 0
-  mutations = @(
-    @{
-      mutationId = [guid]::NewGuid().ToString()
-      type = "ADJUST_STOCK"
-      entityId = "33333333-3333-4333-8333-333333333331"
-      payload = @{
-        locationId = "22222222-2222-4222-8222-222222222221"
-        delta = 3
-        reason = "Receiving count completed offline"
-      }
-    }
-  )
-} | ConvertTo-Json -Depth 6
-
-Invoke-RestMethod `
-  -Method Post `
-  -Uri "http://localhost:8080/api/v1/merchants/$merchant/sync/batches" `
-  -Headers $headers `
-  -ContentType "application/json" `
-  -Body $body
+.\gradlew.bat clean test bootJar --no-build-cache
+docker compose config --quiet
+docker compose up --build --wait --wait-timeout 180
+curl.exe http://127.0.0.1:8080/actuator/health
 ```
 
-Submitting the exact same `mutationId` again returns the stored result and does not adjust stock twice.
+CI performs these checks against PostgreSQL and Redis. CodeQL scans Kotlin/Java source. Successful mobile CI also publishes an installable debug APK artifact.
 
-## Mutation rules
+## Engineering notes
 
-| Mutation | Required fields | Resolution |
-|---|---|---|
-| `CREATE_PRODUCT` | Product payload; optional client UUID | Reject duplicate SKU |
-| `UPDATE_PRODUCT` | Product UUID, `baseVersion`, changed fields | Server retains current record when the version is stale |
-| `ADJUST_STOCK` | Product UUID, location UUID, numeric delta | Apply once; reject zero or negative resulting stock |
-
-The detailed mobile contract is in [docs/offline-sync-contract.md](docs/offline-sync-contract.md).
-
-## Tests
-
-```powershell
-./gradlew.bat clean test bootJar --no-build-cache
-```
-
-The test suite checks application startup, conflict policy, idempotent stock replays, and stale product conflict recording. CI validates the Compose file and starts the complete application against PostgreSQL before checking its health endpoint. CodeQL uses a clean uncached compilation so Kotlin source is always observed during analysis.
-
-## Repository structure
-
-```text
-src/main/kotlin/dev/merqadyn/api
-├── api          HTTP contracts, validation, and error responses
-├── catalog      Product persistence and version rules
-├── config       Stateless write security
-├── dashboard    Read model for the operations page
-├── inventory    Inventory balances and stock movements
-├── merchant     Merchants, locations, and devices
-└── sync         Mutation deduplication, conflicts, and change cursors
-```
-
-## Companion application
-
-`merqadyn-mobile` is the next repository in the portfolio roadmap. It will use Jetpack Compose, Room, and WorkManager to queue mutations locally and consume this API's sync contract.
+- [Offline sync contract](docs/offline-sync-contract.md)
+- [Scaling](docs/scaling.md)
+- [Threat model](docs/threat-model.md)
+- [Operations runbook](docs/runbook.md)
+- [Security policy](SECURITY.md)
 
 ## License
 

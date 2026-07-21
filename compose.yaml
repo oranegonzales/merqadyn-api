@@ -1,10 +1,26 @@
 services:
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /data:size=16m,mode=1777
+    pids_limit: 100
+    mem_limit: 192m
+
   postgres:
     image: postgres:17-alpine
     environment:
       POSTGRES_DB: merqadyn
       POSTGRES_USER: ${DATABASE_USER:-merqadyn}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-merqadyn}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Run scripts/start-local.ps1 to create .env}
     volumes:
       - merqadyn-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -12,8 +28,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
-    ports:
-      - "5432:5432"
+    pids_limit: 200
+    mem_limit: 768m
 
   app:
     build:
@@ -21,11 +37,17 @@ services:
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/merqadyn
       DATABASE_USER: ${DATABASE_USER:-merqadyn}
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-merqadyn}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Run scripts/start-local.ps1 to create .env}
       MERQADYN_ADMIN_USER: ${MERQADYN_ADMIN_USER:-merqadyn}
-      MERQADYN_ADMIN_PASSWORD: ${MERQADYN_ADMIN_PASSWORD:-change-me}
+      MERQADYN_ADMIN_PASSWORD: ${MERQADYN_ADMIN_PASSWORD:?Run scripts/start-local.ps1 to create .env}
+      REDIS_URL: redis://redis:6379
+      RATE_LIMIT_BACKEND: redis
+      DATABASE_POOL_MAX_SIZE: 20
+      DATABASE_POOL_MIN_IDLE: 5
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://localhost:8080/actuator/health"]
@@ -35,6 +57,16 @@ services:
       start_period: 15s
     ports:
       - "8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 200
+    mem_limit: 768m
+    init: true
 
 volumes:
   merqadyn-postgres:
