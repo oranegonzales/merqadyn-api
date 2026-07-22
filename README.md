@@ -35,7 +35,7 @@ Stock changes are deltas. Product edits carry a base version. Replayed mutation 
 Requirements are Docker Desktop using Linux containers and Git. PostgreSQL is internal to the Compose network; only application port 8080 is published.
 
 ```powershell
-git clone https://github.com/oranegonzales/merqadyn-apido.git merqadyn-api
+git clone https://github.com/oranegonzales/merqadyn-api.git merqadyn-api
 cd merqadyn-api
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -Detach
 curl.exe http://127.0.0.1:8080/actuator/health
